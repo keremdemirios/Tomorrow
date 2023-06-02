@@ -18,7 +18,7 @@ extension Items {
 
     @NSManaged public var name: String?
     @NSManaged public var createdAt: Date?
-
+    @NSManaged var order: Int16
 }
 
 extension Items : Identifiable {

@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import CoreData
 
 class ViewController: UIViewController {
     
@@ -59,15 +60,18 @@ class ViewController: UIViewController {
     }
     
     private func getAllItem(){
-        do{
-            models = try context.fetch(Items.fetchRequest())
+        let fetchRequest: NSFetchRequest<Items> = Items.fetchRequest()
+        let sortDescriptor = NSSortDescriptor(key: "order", ascending: true)
+        fetchRequest.sortDescriptors = [sortDescriptor]
+        
+        do {
+            models = try context.fetch(fetchRequest)
             
             DispatchQueue.main.async {
                 self.plansListTableView.reloadData()
             }
-        }
-        catch {
-            // error
+        } catch {
+            print("Error at get all item.")
         }
     }
     //MARK: - Core Data Functions
@@ -107,6 +111,18 @@ class ViewController: UIViewController {
         }
         catch {
          print("Error at update item.")
+        }
+    }
+    
+    private func updateItemOrders() {
+        for (index, item) in models.enumerated() {
+            item.order = Int16(index)
+        }
+        
+        do {
+            try context.save()
+        } catch {
+            print("Error at update item orders.")
         }
     }
     
@@ -173,6 +189,8 @@ class ViewController: UIViewController {
         
         let mainRight: () = navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(didTapAdd))
         mainRight
+        
+        updateItemOrders()
         
         print("Saved.")
     }
@@ -257,25 +275,7 @@ extension ViewController: UITableViewDelegate, UITableViewDataSource {
     }
     
     func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
-        models.swapAt(sourceIndexPath.row, destinationIndexPath.row)
-        
-        do{
-            try context.save()
-        }
-        catch {
-            print("Although the lines changed, the movement did not change the lines. ")
-        }
+        let movedItem = models.remove(at: sourceIndexPath.row)
+        models.insert(movedItem, at: destinationIndexPath.row)
     }
 }
-
-//func updateItem(item: Items, newName: String ){
-//    item.name = newName
-//
-//    do{
-//        try context.save()
-//        getAllItem()
-//    }
-//    catch {
-//     print("Error at update item.")
-//    }
-//}
