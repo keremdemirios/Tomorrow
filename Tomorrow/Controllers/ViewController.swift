@@ -1,4 +1,4 @@
-// YAPILACAKLAR : SAVE METHODUNU HALLET
+
 //  ViewController.swift
 //  Tomorrow
 //
