@@ -7,12 +7,15 @@
 
 import UIKit
 import CoreData
+import UserNotifications
 
 class ViewController: UIViewController {
     
     //MARK: - UI Elements
     
     let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+    private let appDelegate = UIApplication.shared.delegate as! AppDelegate
+
     private var models = [Items]()
     
     public let plansListTableView: UITableView = {
@@ -39,6 +42,9 @@ class ViewController: UIViewController {
         
         let mainLeft: () = navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .edit, target: self, action: #selector(didTapEdit))
         mainLeft
+        
+//        scheduleNotification()
+        scheduleDailyDeletionNotification()
     }
     
     //MARK: - Functions
@@ -74,33 +80,121 @@ class ViewController: UIViewController {
             print("Error at get all item.")
         }
     }
-    //MARK: - Core Data Functions
-    private func createItem(name:String){
-        let newItem = Items(context: context)
-        newItem.name = name
-        newItem.createdAt = Date()
+    
+    private func scheduleNotification() { // bu duzgun calisiyor. Hatirlatma icin sadece.
+        let content = UNMutableNotificationContent()
+        content.title = "Hatırlatma!"
+        content.body = "Saat 22.00'da tüm hedefleriniz silinecektir."
+        content.sound = UNNotificationSound.default
         
-        do{
-            try context.save()
-            getAllItem()
-        }
-        catch {
-            
+        var dateComponents = DateComponents()
+        dateComponents.hour = 13
+        dateComponents.minute = 21
+        
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let request = UNNotificationRequest(identifier: "DeleteGoalsNotification", content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+    }
+    
+    private func scheduleDailyDeletionNotification() {
+        let content = UNMutableNotificationContent()
+        content.title = "Hedefler silindi."
+        content.sound = UNNotificationSound.default
+        
+        var dateComponents = DateComponents()
+        dateComponents.hour = 13
+        dateComponents.minute = 49 
+        
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let request = UNNotificationRequest(identifier: "DailyDeletionNotification", content: content, trigger: trigger)
+        
+        let currentTime = Date()
+        let components = Calendar.current.dateComponents([.hour, .minute], from: currentTime)
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("Error scheduling daily deletion notification: \(error.localizedDescription)")
+            } else {
+                if let currentHour = components.hour, let currentMinute = components.minute {
+                    if currentHour == dateComponents.hour && currentMinute == dateComponents.minute {
+                        print("Vakit geldi.")
+                    }
+                    else {
+                        print("Henuz silinme vakti gelmedi.")
+                    }
+                }
+            }
         }
     }
     
-    private func deleteItem(item: Items){
-        context.delete(item)
+    func checkTime() {
+        let targetHour = 13
+        let targetMinute = 35
         
-        do{
+        let calendar = Calendar.current
+        let currentTime = Date()
+        
+        let components = calendar.dateComponents([.hour, .minute], from: currentTime)
+        
+        if let currentHour = components.hour, let currentMinute = components.minute {
+            if currentHour == targetHour && currentMinute == targetMinute {
+                print("Vakit geldi!")
+            } else {
+                print("Henüz vakit gelmedi.")
+            }
+        }
+    }
+
+    
+    public func deleteAllItems() {
+        let fetchRequest: NSFetchRequest<NSFetchRequestResult> = NSFetchRequest(entityName: "Items")
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try context.execute(deleteRequest)
+            try context.save()
+            
+            models.removeAll() // Verileri tutan models dizisini temizle
+            
+            DispatchQueue.main.async {
+                self.plansListTableView.reloadData()
+            }
+            
+            print("Tüm veriler silindi.")
+        } catch {
+            print("Veriler silinirken hata oluştu: \(error.localizedDescription)")
+        }
+    }
+
+
+    
+    //MARK: - Core Data Functions
+    private func createItem(name: String, createdAt: Date) {
+        let newItem = Items(context: context)
+        newItem.name = name
+        newItem.createdAt = createdAt
+        
+        do {
             try context.save()
             getAllItem()
-        }
-        catch {
-            
+        } catch {
+            print("Error at creating item.")
         }
         
+        self.scheduleNotification()
     }
+    
+    private func deleteItem(item: Items) {
+        context.delete(item)
+        
+        do {
+            try context.save()
+            getAllItem()
+        } catch {
+            print("Veri silinirken hata oluştu.")
+        }
+    }
+    
     
     func updateItem(item: Items, newName: String ){
         item.name = newName
@@ -110,7 +204,7 @@ class ViewController: UIViewController {
             getAllItem()
         }
         catch {
-         print("Error at update item.")
+            print("Error at update item.")
         }
     }
     
@@ -126,27 +220,50 @@ class ViewController: UIViewController {
         }
     }
     
+    
     //MARK: - Actions
     
-    @objc func didTapAdd(){
+    @objc func didTapAdd() {
+        let currentDate = Date()
+        let calendar = Calendar.current
         
-        let alert = UIAlertController(title: "New Item",
-                                      message: "Enter New Item",
-                                      preferredStyle: .alert
-        )
+        let currentHour = calendar.component(.hour, from: currentDate)
+        let currentMinute = calendar.component(.minute, from: currentDate)
         
-        alert.addTextField(configurationHandler: nil)
-        alert.addAction(UIAlertAction(title: "Submit", style: .default, handler: { [weak self] _ in
-            guard let field = alert.textFields?.first, let text = field.text, !text.isEmpty else {
+        // Veri ekleme saatinin 18:00'dan sonra olduğunu kontrol et
+        if currentHour > 12 || (currentHour == 12 && currentMinute >= 0) {
+            guard let tomorrow = calendar.date(byAdding: .day, value: 1, to: currentDate) else {
                 return
             }
-            self?.createItem(name: text)
-            print("New Item  : \(text)")
-            print("New Count : \(self!.models.count)")
             
-        }))
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        present(alert, animated: true)
+            let alert = UIAlertController(title: "New Item",
+                                          message: "Enter New Item",
+                                          preferredStyle: .alert
+            )
+            
+            alert.addTextField(configurationHandler: nil)
+            alert.addAction(UIAlertAction(title: "Submit", style: .default, handler: { [weak self] _ in
+                guard let field = alert.textFields?.first, let text = field.text, !text.isEmpty else {
+                    return
+                }
+                
+                // Yeni veriyi oluştur
+                self?.createItem(name: text, createdAt: tomorrow)
+                print("New Item  : \(text)")
+                print("New Count : \(self!.models.count)")
+                
+            }))
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            present(alert, animated: true)
+        } else {
+            // Veri ekleme saati henüz gelmedi, kullanıcıya uyarı ver
+            let alert = UIAlertController(title: "Information",
+                                          message: "You can only add goal after 01:00 PM.",
+                                          preferredStyle: .alert)
+            
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+        }
     }
     
     @objc func didTapEdit(){
@@ -155,8 +272,9 @@ class ViewController: UIViewController {
         }
         else { // Edit On
             plansListTableView.isEditing = true
-            navigationItem.leftBarButtonItem?.isHidden = true // Edit Button is hidden
-            navigationItem.rightBarButtonItem?.isHidden = true // Add Button is hidden
+            
+            navigationItem.leftBarButtonItem?.isHidden = true
+            navigationItem.rightBarButtonItem?.isHidden = true
             let cancelButton: () = navigationItem.leftBarButtonItem = UIBarButtonItem(barButtonSystemItem: .cancel, target: self, action: #selector(didTapCancel))
             cancelButton
             
@@ -166,8 +284,10 @@ class ViewController: UIViewController {
         }
     }
     
+    
     @objc func didTapCancel(){
         plansListTableView.isEditing = false
+        
         navigationItem.leftBarButtonItem?.isHidden = true
         navigationItem.rightBarButtonItem?.isHidden = false
         
@@ -178,7 +298,8 @@ class ViewController: UIViewController {
         mainRight
     }
     
-    @objc func didTapSave(){
+    
+    @objc func didTapSave() {
         plansListTableView.isEditing = false
         
         navigationItem.leftBarButtonItem?.isHidden = true
@@ -194,6 +315,7 @@ class ViewController: UIViewController {
         
         print("Saved.")
     }
+    
     
 }
 

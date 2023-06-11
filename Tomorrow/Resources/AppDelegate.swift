@@ -7,16 +7,60 @@
 
 import UIKit
 import CoreData
+import UserNotifications
 
 @main
-class AppDelegate: UIResponder, UIApplicationDelegate {
-
-
-
+class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        
+        // UNUserNotificationCenterDelegate'i ayarla
+        UNUserNotificationCenter.current().delegate = self
+        
+        UNUserNotificationCenter.current()
+        
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { success, error in
+            if success {
+                print("User gave permissions for local notifications. ")
+            }
+            else {
+                print("Error getting app permission.")
+            }
+        }
         return true
     }
+    
+    // UNUserNotificationCenterDelegate'den bildirimi yakalayın
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let notificationType = notification.request.identifier
+        switch notificationType {
+        case "DeleteGoalsNotification":
+            print("Hedefler silinecektir bildirimi geldi.")
+        case "DailyDeletionNotification":
+            deleteAllData()
+            print("Bildirim geldi DailyDeletionNotification.")
+        default:
+            print("Bildirim geldi")
+        }
+    }
+
+    func deleteAllData() {
+        let appDelegate = UIApplication.shared.delegate as! AppDelegate
+        let managedContext = appDelegate.persistentContainer.viewContext
+        
+        let fetchRequest = NSFetchRequest<NSFetchRequestResult>(entityName: "Items")
+        let deleteRequest = NSBatchDeleteRequest(fetchRequest: fetchRequest)
+        
+        do {
+            try managedContext.execute(deleteRequest)
+            try managedContext.save()
+            print("Tüm veriler silindi.")
+        } catch let error as NSError {
+            print("Veri silme hatası: \(error), \(error.userInfo)")
+        }
+    }
+
+
 
     // MARK: UISceneSession Lifecycle
 
@@ -76,6 +120,4 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             }
         }
     }
-
 }
-
